@@ -1,4 +1,4 @@
-import sys
+from sys import stdin
 
 class Graph:
     """A mutable, unweighted, directed graph type"""
@@ -26,15 +26,16 @@ class Graph:
                 yield (a, b)
 
 # Read the edges from the standard input stream as tuples
-edges = [tuple(line.strip().split('\t')) for line in sys.stdin.readlines()]
+def edges():
+    for line in stdin.readlines():
+        yield tuple(line.strip().split('\t'))
 
 # Assemble the edges into a graph structure represented by a dictionary
 graph = Graph()
-graph.addEdges(edges)
+graph.addEdges(edges())
 
 # TODO - Eliminate nodes with only one input and one output edge
 
 # Disregard the ordering (for now, at least), since we have probably added additional edges
-
 for edge in graph.edges():
     print edge[0] + '\t' + edge[1]
