@@ -12,13 +12,24 @@ class Graph:
         have target nodes associated with it.
         
         """
+        # Each key in self.graph is the name of a node, and each node
+        #  is represented as such.
+        # Values in the dictionary are tuples of two dimensions. Each
+        #  value in the tuple is a set of nodes, the first of which
+        #  represents nodes for the key's output edges, and the second
+        #  of which represents the nodes for the key's input edges.
+        # Thus, if there is a directed edge from A to B, then
+        #      'B' in self.graph['A'][0]
+        #  and 'A' in self.graph['B'][1]
         if self.graph.has_key(a):
-            self.graph[a].add(b)
+            self.graph[a][0].add(b)
         else:
-            self.graph[a] = set(b)
+            self.graph[a] = (set(b), set())
         
-        if not self.graph.has_key(b):
-            self.graph[b] = set()
+        if self.graph.has_key(b):
+            self.graph[b][1].add(a)
+        else:
+            self.graph[b] = (set(), set(a))
     
     def addEdges(self, edges):
         """Adds edges from the provided collection of tuples.
@@ -32,8 +43,9 @@ class Graph:
             
     def iterEdges(self):
         """Generates edges represented by tuples"""
-        for a, others in self.graph.iteritems():
-            for b in others:
+        for a, tup in self.graph.iteritems():
+            for b in tup[0]:
+                assert(a in self.graph[b][1])
                 yield (a, b)
     
     def nodes(self):
@@ -41,27 +53,39 @@ class Graph:
         return self.graph.keys()
     
     def nodesForInputEdges(self, node):
-        """Nodes corresponding to the given node's input edges.
-        
-        Currently O(N), but we can probably do better.
-        
-        """
-        return [a for a, others in self.graph.iteritems() if node in others];
+        """Nodes corresponding to the given node's input edges"""
+        if self.graph.has_key(node):
+            return [a for a in self.graph[node][1]]
+        else:
+            return []
     
     def nodesForOutputEdges(self, node):
         """Nodes corresponding to the given node's output edges"""
         if self.graph.has_key(node):
-            return [b for b in self.graph[node]]
+            return [b for b in self.graph[node][0]]
+        else:
+            return []
     
     def removeNode(self, node):
         """Removes a node from the graph"""
         if self.graph.has_key(node):
-            # Remove node as source
+            # Note which nodes are connected to this node.
+            outputEdgeNodes = self.graph[node][0]
+            inputEdgeNodes = self.graph[node][1]
+            
+            # Remove the node from the dictionary key
             del self.graph[node]
             
-            # Remove node as destination
-            for targets in self.graph.itervalues():
-                targets.discard(node)
+            # Remove the node from its connections
+            for b in outputEdgeNodes:
+                # Edge to b was an output of node,
+                #  so b's input edges contain node
+                self.graph[b][1].discard(node)
+                
+            for a in inputEdgeNodes:
+                # Edge from a was an input edge of node,
+                #  so a's output edges contain node
+                self.graph[a][0].discard(node)
 
 # Read the edges from the standard input stream as tuples
 def edges():
@@ -75,8 +99,7 @@ graph.addEdges(edges())
 # Eliminate nodes with only one input and one output edge. For now, this is
 #  done in multiple passes. In each pass, nodes that should be deleted are
 #  removed, but the process may result in new nodes that should be deleted.
-# In the worst case, this is O(n^2) (assuming we fix the nodesForInputEdges
-#  attribute). Can we do better?
+# In the worst case, this is O(n^2). Can we do better?
 needsAnotherPass = True
 while needsAnotherPass:
     # We'll flag this as true if we delete any more.
