@@ -8,10 +8,15 @@ class Graph:
     def addEdge(self, a, b):
         """Adds a single edge to the graph if it does not already exist.
         
-        Each node has a key in the graph dictionary, but may or may not
-        have target nodes associated with it.
+        The edge must start and end at different nodes.
         
         """
+        
+        # Disallow an edge that starts and ends at the same node.
+        assert a != b
+        if a == b:
+            return
+        
         # Each key in self.graph is the name of a node, and each node
         #  is represented as such.
         # Values in the dictionary are tuples of two dimensions. Each
@@ -40,12 +45,15 @@ class Graph:
         """
         for edge in edges:
             self.addEdge(edge[0], edge[1])
+    
+    def edgeExists(self, a, b):
+        return self.graph.has_key(a) and b in self.graph[a][0]
             
     def iterEdges(self):
         """Generates edges represented by tuples"""
         for a, tup in self.graph.iteritems():
             for b in tup[0]:
-                assert(a in self.graph[b][1])
+                assert a in self.graph[b][1]
                 yield (a, b)
     
     def nodes(self):
@@ -67,7 +75,7 @@ class Graph:
             return []
     
     def removeNode(self, node):
-        """Removes a node from the graph"""
+        """Removes a node from the graph, along with all of its edges"""
         if self.graph.has_key(node):
             # Note which nodes are connected to this node.
             outputEdgeNodes = self.graph[node][0]
@@ -96,23 +104,51 @@ def edges():
 graph = Graph()
 graph.addEdges(edges())
 
-# Eliminate nodes with only one input and one output edge. For now, this is
-#  done in multiple passes. In each pass, nodes that should be deleted are
-#  removed, but the process may result in new nodes that should be deleted.
-# In the worst case, this is O(n^2). Can we do better?
-needsAnotherPass = True
-while needsAnotherPass:
-    # We'll flag this as true if we delete any more.
-    needsAnotherPass = False
-    for node in graph.nodes():
-        inputNodes = graph.nodesForInputEdges(node)
-        outputNodes = graph.nodesForOutputEdges(node)
-        if len(inputNodes) == 1 and len(outputNodes) == 1:
-            graph.removeNode(node)
-            if inputNodes[0] != outputNodes[0]:
-                graph.addEdge(inputNodes[0], outputNodes[0])
-            needsAnotherPass = True
-
+# Eliminate nodes with only one input and one output edge.
+# This is done one node at a time, but we may have to revisit
+#  some nodes under certain circumstances.
+# We track a set of nodes. When we are checking a node for
+#  possible deletion, we pop it off the set. When a node must
+#  be revisited, it is added back to the set.
+checkNodes = set(graph.nodes())
+while len(checkNodes) > 0:
+    node = checkNodes.pop()
+    inputNodes = graph.nodesForInputEdges(node)
+    outputNodes = graph.nodesForOutputEdges(node)
+    
+    if len(inputNodes) == 0 and len(outputNodes) == 0:
+        # The node is an orphan. Remove it.
+        graph.removeNode(node)
+    elif len(inputNodes) == 1 and len(outputNodes) == 1:
+        # The node must be removed
+        graph.removeNode(node)
+        
+        origin, destination = inputNodes[0], outputNodes[0]
+        
+        # Note that we have three scenarios here:
+        #  1. The origin is the destination.
+        # Or, the origin is not the destination, and either:
+        #  2. There is already an edge from the origin to the destination
+        #  3. There is not already an edge from the origin to the destination
+        if origin == destination:
+            # Scenario 1
+            # We'll re-check it so it can be removed if it is orphaned.
+            checkNodes.add(origin)
+        elif graph.edgeExists(origin, destination):
+            # Scenario 2
+            # Since the edge already exists, the cardinality of both the
+            #  origin's and destination's edges have changed, so if they have
+            #  already been processed, we need to do it again.
+            checkNodes.add(origin)
+            checkNodes.add(destination)
+        else:
+            # Scenario 3
+            # We'll add the edge here. Note that the edges we're adding back
+            #  to each node are in the same direction as the edges we removed.
+            # The cardinality of the edges of both nodes have remained the same,
+            #  so we do not need to force another visit.
+            graph.addEdge(origin, destination)
+    
 # Disregard the ordering (for now, at least), since we have probably added additional edges
 for edge in graph.iterEdges():
     print edge[0] + '\t' + edge[1]
