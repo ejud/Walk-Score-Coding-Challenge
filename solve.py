@@ -1,60 +1,68 @@
 from sys import stdin
+import itertools
 
 class Graph:
     """A mutable, unweighted, directed graph type"""
     def __init__(self):
-        self.graph = dict()
+        self.graph = {}
         
-    def addEdge(self, a, b):
+    def addEdge(self, a, b, attribute=None):
         """Adds a single edge to the graph if it does not already exist.
+        
+        If the edge already exists, it is updated with the new attribute.
         
         The edge must start and end at different nodes.
         
         """
         
-        # Disallow an edge that starts and ends at the same node.
+        # Disallow any edge that starts and ends at the same node.
         assert a != b
         if a == b:
             return
         
         # Each key in self.graph is the name of a node, and each node
         #  is represented as such.
-        # Values in the dictionary are tuples of two dimensions. Each
-        #  value in the tuple is a set of nodes, the first of which
-        #  represents nodes for the key's output edges, and the second
-        #  of which represents the nodes for the key's input edges.
-        # Thus, if there is a directed edge from A to B, then
-        #      'B' in self.graph['A'][0]
+        # Values in the dictionary are tuples of two dimensions.
+        # The first value in the tuple is a dictionary of nodes to
+        #  attributes. The nodes (keys) in this nested dictionary represent the
+        #  destinations of output edges from the key of the outer dictionary.
+        #  The attributes (values of the nested dictionary) represent the
+        #  attribute object for the edge that was passed to this method.
+        # The second value in the tuple is just a set of nodes representing
+        #  the input edges to the outer dictionary's key.
+        # From the above, if there is a directed edge from 'A' to 'B' with
+        #  attribute 'foo', then:
+        #      self.graph['A'][0]['B'] == 'foo'
         #  and 'A' in self.graph['B'][1]
         if self.graph.has_key(a):
-            self.graph[a][0].add(b)
+            self.graph[a][0][b] = attribute
         else:
-            self.graph[a] = (set(b), set())
+            self.graph[a] = ({b: attribute}, set())
         
         if self.graph.has_key(b):
             self.graph[b][1].add(a)
         else:
-            self.graph[b] = (set(), set(a))
+            self.graph[b] = ({}, set(a))
     
     def addEdges(self, edges):
-        """Adds edges from the provided collection of tuples.
-        
-        Each tuple's first value is an origin node and its second
-        value is the corresponding destination.
-        
+        """Adds attributed edges from the provided collection of tuples.
+
+        Each tuple should be of the form (origin, destination, attribute)
+
         """
         for edge in edges:
-            self.addEdge(edge[0], edge[1])
-    
+            assert(len(edge) in [2, 3])
+            self.addEdge(edge[0], edge[1], edge[2] if len(edge) >= 3 else None)
+
     def edgeExists(self, a, b):
-        return self.graph.has_key(a) and b in self.graph[a][0]
-            
+        return self.graph.has_key(a) and self.graph[a][0].has_key(b)
+        
     def iterEdges(self):
-        """Generates edges represented by tuples"""
+        """Generates edges represented by tuples of the form (a, b, attribute)"""
         for a, tup in self.graph.iteritems():
-            for b in tup[0]:
+            for b, attribute in tup[0].iteritems():
                 assert a in self.graph[b][1]
-                yield (a, b)
+                yield (a, b, attribute)
     
     def nodes(self):
         """Returns a list of all nodes"""
@@ -70,7 +78,7 @@ class Graph:
     def nodesForOutputEdges(self, node):
         """Nodes corresponding to the given node's output edges"""
         if self.graph.has_key(node):
-            return [b for b in self.graph[node][0]]
+            return [b for b in self.graph[node][0].iterkeys()]
         else:
             return []
     
@@ -78,7 +86,7 @@ class Graph:
         """Removes a node from the graph, along with all of its edges"""
         if self.graph.has_key(node):
             # Note which nodes are connected to this node.
-            outputEdgeNodes = self.graph[node][0]
+            outputEdgeNodes = self.graph[node][0].keys()
             inputEdgeNodes = self.graph[node][1]
             
             # Remove the node from the dictionary key
@@ -93,16 +101,21 @@ class Graph:
             for a in inputEdgeNodes:
                 # Edge from a was an input edge of node,
                 #  so a's output edges contain node
-                self.graph[a][0].discard(node)
+                del self.graph[a][0][node]
 
 # Read the edges from the standard input stream as tuples
-def edges():
+def inputEdges():
     for line in stdin.readlines():
         yield tuple(line.strip().split('\t'))
 
 # Assemble the edges into a graph structure represented by a dictionary
 graph = Graph()
-graph.addEdges(edges())
+
+# Track the edge count, which will be used to attribute our edges
+edgeCounter = itertools.count()
+
+# Read in the input edges and attribute them with the counter value
+graph.addEdges([edge + tuple([edgeCounter.next()]) for edge in inputEdges()])
 
 # Eliminate nodes with only one input and one output edge.
 # This is done one node at a time, but we may have to revisit
@@ -137,8 +150,8 @@ while len(checkNodes) > 0:
         elif graph.edgeExists(origin, destination):
             # Scenario 2
             # Since the edge already exists, the cardinality of both the
-            #  origin's and destination's edges have changed, so if they have
-            #  already been processed, we need to do it again.
+            #  origin's and destination's edges have changed, so we need to
+            #  make sure they are processed hereafter.
             checkNodes.add(origin)
             checkNodes.add(destination)
         else:
@@ -147,8 +160,12 @@ while len(checkNodes) > 0:
             #  to each node are in the same direction as the edges we removed.
             # The cardinality of the edges of both nodes have remained the same,
             #  so we do not need to force another visit.
-            graph.addEdge(origin, destination)
+            graph.addEdge(origin, destination, edgeCounter.next())
     
-# Disregard the ordering (for now, at least), since we have probably added additional edges
-for edge in graph.iterEdges():
+# Sort the edges by their attribute value, which is the order in which we
+#  added them to the graph. If any input edges still exist, they are inserted
+#  in their original order.
+edges = sorted(graph.iterEdges(), key=lambda edge: edge[2])
+
+for edge in edges:
     print edge[0] + '\t' + edge[1]
